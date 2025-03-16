@@ -1,15 +1,17 @@
 using System.Collections;
 using UnityEngine;
 
-[RequireComponent(typeof(Collider2D), typeof(AudioSource))]
+[RequireComponent(typeof(AudioSource))]
 public class Alarm : MonoBehaviour
 {
+	private const float MaxVolume = 1;
+	private const float MinVolume = 0;
+
 	[SerializeField][Min(0)] private float _volumeRate;
+	[SerializeField] private ThiefDetector _thiefDetector;
 
 	private AudioSource _audioSource;
-	private int _thiefCount = 0;
 	private Coroutine _soundRoutine;
-	private bool _isOn;
 
 	private void Awake()
 	{
@@ -21,65 +23,45 @@ public class Alarm : MonoBehaviour
 		_audioSource.volume = 0;
 	}
 
-	private void OnTriggerEnter2D(Collider2D collision)
+	private void OnEnable()
 	{
-		if (collision.TryGetComponent<Thief>(out _))
-		{
-			_thiefCount++;
-			ActiveVolumeRoutine(true);
-		}
+		_thiefDetector.BustedIn += ActiveVolume;
+		_thiefDetector.BustedOut += DeactiveVolume;
 	}
 
-	private void OnTriggerExit2D(Collider2D collision)
+	private void OnDisable()
 	{
-		if (collision.TryGetComponent<Thief>(out _))
-		{
-			_thiefCount--;
-
-			if (_thiefCount == 0)
-			{
-				ActiveVolumeRoutine(false);
-			}
-		}
+		_thiefDetector.BustedIn -= ActiveVolume;
+		_thiefDetector.BustedOut -= DeactiveVolume;
 	}
 
-	private void ActiveVolumeRoutine(bool activeOn)
+	private void ActiveVolume()
 	{
-		if (activeOn != _isOn)
-		{
-			if (_soundRoutine != null)
-			{
-				StopCoroutine(_soundRoutine);
-			}
-
-			_isOn = activeOn;
-
-			if (activeOn)
-			{
-				_soundRoutine = StartCoroutine(SoundOn());
-			}
-			else
-			{
-				_soundRoutine = StartCoroutine(SoundOff());
-			}
-		}
+		SetVolume(MaxVolume);
 	}
 
-	private IEnumerator SoundOn()
+	private void DeactiveVolume()
 	{
-		while (_audioSource.volume < 1)
-		{
-			_audioSource.volume += _volumeRate * Time.deltaTime;
-
-			yield return null;
-		}
+		SetVolume(MinVolume);
 	}
 
-	private IEnumerator SoundOff()
+	private void SetVolume(float targetVolume)
 	{
-		while (_audioSource.volume > 0)
+		if (_soundRoutine != null)
 		{
-			_audioSource.volume -= _volumeRate * Time.deltaTime;
+			StopCoroutine(_soundRoutine);
+		}
+
+		_soundRoutine = StartCoroutine(ChangeVolume(targetVolume));
+	}
+
+	private IEnumerator ChangeVolume(float targetVolume)
+	{
+		float step = (targetVolume > _audioSource.volume) ? _volumeRate : -_volumeRate;
+
+		while (Mathf.Approximately(_audioSource.volume, targetVolume) == false)
+		{
+			_audioSource.volume = Mathf.Clamp(_audioSource.volume + step * Time.deltaTime, 0, 1);
 
 			yield return null;
 		}
